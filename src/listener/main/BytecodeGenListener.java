@@ -45,6 +45,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 			params = (MiniCParser.ParamsContext) ctx.getChild(3);	//매개변수 노드들을 임시변수에 넣습니다.
 			symbolTable.putParams(params);								//매개변수들을 지역심볼테이블에 넣습니다.
 		}
+		System.out.println("enterFun_decl");
 	}
 
 	
@@ -62,6 +63,8 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 		else  { // simple decl 전역 일반변수선언
 			symbolTable.putGlobalVar(varName, Type.INT);
 		}
+
+        System.out.println("enterVar_decl");
 	}
 
 	
@@ -76,12 +79,14 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 		else  { // simple decl	//지역 일반 변수 선언인 경우
 			symbolTable.putLocalVar(getLocalVarName(ctx), Type.INT);
 		}
+
+        System.out.println("enterLocal_decl");
 	}
 
 	
 	@Override
 	public void exitProgram(MiniCParser.ProgramContext ctx) {
-		String classProlog = getFunProlog();
+
 		
 		String fun_decl = "", var_decl = "";
 
@@ -91,12 +96,13 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 			else					//노드가 변수라면 newText맵에서 불러와서 문자열에 저장한다.
 				var_decl += newTexts.get(ctx.decl(i));
 		}
+		String classProlog = getFunProlog();
 
 		//완성된 bytecode들을 ctx를 키값으로 테이블에 넣는다.
 		newTexts.put(ctx, classProlog + var_decl + fun_decl);
 
 		System.out.println(newTexts.get(ctx));	//완성된 bytecode를 출력한다.
-
+        System.out.println("exitProgram");
 	}	
 	
 	
@@ -112,6 +118,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 				decl += newTexts.get(ctx.fun_decl());	//newText에서 불러와서 문자열에 저장한다.
 		}
 		newTexts.put(ctx, decl);						//상위 노드에 자식노드들의 문자열을 저장한다.
+        System.out.println("exitDecl");
 	}
 	
 	// stmt	: expr_stmt | compound_stmt | if_stmt | while_stmt | return_stmt
@@ -133,7 +140,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 				stmt += newTexts.get(ctx.return_stmt());
 		}
 		newTexts.put(ctx, stmt);
-
+        System.out.println("exitStmt");
 	}
 	
 	// expr_stmt	: expr ';'
@@ -145,7 +152,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 			stmt += newTexts.get(ctx.expr());	// expr
 		}
 		newTexts.put(ctx, stmt);	//수식을 상위의 노드에 저장한다.
-
+        System.out.println("exitExpr_stmt");
 	}
 	
 	
@@ -164,6 +171,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
         str += lend + ": " + "\n";					//while문을 탈출하는 label입니다.
 
         newTexts.put(ctx,str);						//반복문 bytecode 문자열을 현재 노드에 저장합니다.
+        System.out.println("exitWhile_stmt");
 	}
 	
 	
@@ -182,13 +190,16 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 
         str+= ".end method" + "\n";						//bytecode 메서드 마지막에 end method를 넣어줍니다.
         newTexts.put(ctx,str);
+        System.out.println("exitFun_decl");
 	}
 	
 
 	private String funcHeader(MiniCParser.Fun_declContext ctx, String fname) {
+        System.out.println("funcHeader");
 		return ".method public static " + symbolTable.getFunSpecStr(fname) + "\n"	//매개변수로 fname을 받아 메소드의 이름을 만들어줍니다.
 				+ "\t" + ".limit stack " 	+ getStackSize(ctx) + "\n"				//스택의 사이즈를 반환받습니다.
 				+ "\t" + ".limit locals " 	+ getLocalVarSize(ctx) + "\n";			//지역변수의 사이즈를 반환받습니다.
+
 	}
 	
 	
@@ -197,26 +208,40 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 	public void exitVar_decl(MiniCParser.Var_declContext ctx) {
 		String varName = ctx.IDENT().getText();	//변수이름을 반환받아 저장합니다.
 		String varDecl = "";
-		
+		String className = "Test.";
+		//putfield 클래스이름.필드이름 전역변수타입
+		//ex)
+		// aload_0
+		// iconst_2
+		// putfield Test.a I -> Test클래스의 a필드에 정수타입으로 2를 넣겠습니다.
+		// this 객체와 상수2를 스택에 넣고 putfield로 2개를 꺼내와서 a필드에 2를 넣습니다.
 		if (isDeclWithInit(ctx)) {		//해당 노드가 변수 선언 및 초기화 꼴인지를 검사합니다.
-			varDecl += "putfield " + varName + "\n";  	//byte코드로 변환하여 문자열에 다시 저장합니다.
-			// v. initialization => Later! skip now..: 
+			varDecl += "putfield "+varName+ "\n"; 	//byte코드로 변환하여 문자열에 다시 저장합니다.
+			// v. initialization => Later! skip now..:
+
 		}
 		newTexts.put(ctx, varDecl);
+        System.out.println("exitVar_decl");
 	}
 	
 	
 	@Override
 	public void exitLocal_decl(MiniCParser.Local_declContext ctx) {
 		String varDecl = "";
-		
+
 		if (isDeclWithInit(ctx)) {		//변수 선언 및 초기화 꼴인지 검사합니다.
 			String vId = symbolTable.getVarId(ctx);	//심볼테이블에서 변수아이디를 불러옵니다.
 			varDecl += "ldc " + ctx.LITERAL().getText() + "\n"	//ctx노드에서 상수를 문자열로 변환하여 불러옵니다.
 					+ "istore_" + vId + "\n"; 					//지역변수에 저장하는 bytecode를 작성합니다.
-		}
+		}else if(isArrayDecl(ctx)){
+		    String vId = symbolTable.getVarId(ctx);
+		    varDecl += "bipush " + ctx.LITERAL().getText() + "\n"
+                    + "newarray int" + "\n"
+                    + "istore_" + vId + "\n";
+        }
 
 		newTexts.put(ctx, varDecl);
+        System.out.println("exitLocal_decl");
 	}
 
 	
@@ -236,6 +261,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 			}
 		}
         newTexts.put(ctx,str);
+        System.out.println("exitCompound_stmt");
 	}
 
 	// if_stmt	: IF '(' expr ')' stmt | IF '(' expr ')' stmt ELSE stmt;
@@ -266,6 +292,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 		}
 		
 		newTexts.put(ctx, stmt);
+        System.out.println("exitIf_stmt");
 	}
 	
 	
@@ -283,7 +310,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 			temp = symbolTable.getVarId(ctx.getChild(0).getText());	//bytecode의 함수 마지막에 return을 붙여줍니다.
 		}
 		newTexts.put(ctx,temp);
-
+        System.out.println("exitReturn_stmt");
 	}
 
 	
@@ -304,9 +331,9 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 				}
 				//else	// Type int array => Later! skip now..
 				//	expr += "           lda " + symbolTable.get(ctx.IDENT().getText()).value + " \n";
-				} else if (ctx.LITERAL() != null) {	//상수인지 검사합니다.
+			} else if (ctx.LITERAL() != null) {	//상수인지 검사합니다.
 					String literalStr = ctx.LITERAL().getText();				//상수를 문자열화하여 저장합니다.
-					expr += "ldc " + literalStr + " \n";						//ldc [숫자] 꼴로 저장합니다.
+					expr += "ldc " + literalStr + " \n";						//ldc [숫자] 꼴로 저장합니다. "ldc "(원래소스)
 				}
 		}
 		else if(ctx.getChildCount() == 2) { // UnaryOperation
@@ -336,9 +363,14 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 		}
 		// IDENT '[' expr ']' '=' expr
 		else { // Arrays: TODO			*/
+		    expr += "iload_" + symbolTable.getVarId(ctx.IDENT().getText()) + "\n"
+                    + "bipush " + newTexts.get(ctx.getChild(2))
+                    + "bipush " + newTexts.get(ctx.getChild(5))
+                    + "iastore" + "\n";
 		}
-		newTexts.put(ctx, expr);
 
+		newTexts.put(ctx, expr);
+        System.out.println("exitExpr");
 	}
 
 
@@ -371,6 +403,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 					+ lend + ": " + "\n";
 			break;
 		}
+        System.out.println("handleUnaryExpr");
 		return expr;
 	}
 
@@ -471,6 +504,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 				break;
 
 		}
+        System.out.println("handleBinExpr");
 		return expr;
 	}
 	private String handleFunCall(MiniCParser.ExprContext ctx, String expr) {
@@ -483,6 +517,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 			expr = newTexts.get(ctx.args()) 
 					+ "invokestatic " + getCurrentClassName()+ "/" + symbolTable.getFunSpecStr(fname) + "\n";
 		}
+        System.out.println("handleFunCall");
 		return expr;
 			
 	}
@@ -497,6 +532,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 			argsStr += newTexts.get(ctx.expr(i)) ; 		//argsStr 문자열 변수에 bytecode 수식을 저장합니다.
 		}
 		newTexts.put(ctx, argsStr);
+        System.out.println("exitArgs");
 	}
 
 }
