@@ -39,6 +39,12 @@ public class BytecodeGenListenerHelper {
 	static boolean isDeclWithInit(Var_declContext ctx) {
 		return ctx.getChildCount() == 5 ;
 	}
+
+	// var_decl	: type_spec IDENT '=' LITERAL ';
+	// 변수를 선언 및 초기화하는 문장인지를 검사하는 메서드입니다.
+	static boolean isDecl(Var_declContext ctx) {
+		return ctx.getChildCount() == 3 ;
+	}
 	// var_decl	: type_spec IDENT '[' LITERAL ']' ';'
 	// 배열인지 검사하는 메서드입니다.
 	static boolean isArrayDecl(Var_declContext ctx) {
@@ -138,7 +144,7 @@ public class BytecodeGenListenerHelper {
 	}
 
 	//Test클래스의 도입부문을 문자열에 저장하고 반환합니다.
-	static String getFunProlog() {
+	static String getFunProlog(String var_decl) {
 		// return ".class public Test .....
 		// ...
 		// invokenonvirtual java/lang/Object/<init>()
@@ -146,6 +152,7 @@ public class BytecodeGenListenerHelper {
 		// .end method"
         String str = ".class public Test" + "\n" +
                         ".super java/lang/Object" + "\n" +
+						var_decl +
                         ".method public <init>()V" + "\n" + "\t" +
                         "aload_0" + "\n" + "\t" +
                         "invokenonvirtual java/lang/Object/<init>()V" + "\n" + "\t" +

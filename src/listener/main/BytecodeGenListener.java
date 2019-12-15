@@ -59,6 +59,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 		}
 		else if (isDeclWithInit(ctx)) {	//전역변수 초기값 선언 형식
 			symbolTable.putGlobalVarWithInitVal(varName, Type.INT, initVal(ctx));
+
 		}
 		else  { // simple decl 전역 일반변수선언
 			symbolTable.putGlobalVar(varName, Type.INT);
@@ -96,10 +97,10 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 			else					//노드가 변수라면 newText맵에서 불러와서 문자열에 저장한다.
 				var_decl += newTexts.get(ctx.decl(i));
 		}
-		String classProlog = getFunProlog();
+		String classProlog = getFunProlog(var_decl);
 
 		//완성된 bytecode들을 ctx를 키값으로 테이블에 넣는다.
-		newTexts.put(ctx, classProlog + var_decl + fun_decl);
+		newTexts.put(ctx, classProlog+ fun_decl);
 
 		System.out.println(newTexts.get(ctx));	//완성된 bytecode를 출력한다.
         System.out.println("exitProgram");
@@ -163,12 +164,13 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 		String l2 = symbolTable.newLabel();		//label을 새로 만들어 저장한다.
 		String lend = symbolTable.newLabel();	//label을 새로 만들어 저장한다.
         String str = "";
-        str += l2 + ": "+ "\n";						//goto문으로 돌아오는 label입니다.
-        str += handleBinExpr(ctx.expr(),"");	//while문에서 조건식을 처리하여 문자열에 저장합니다.
-        str += "ifeq " + lend + "\n";				//ifeq로 검사한 값이 참이면 lend label로 점프합니다.
-        str += newTexts.get(ctx.stmt());			//while문 안의 내용을 처리하여 저장합니다.
-        str +="goto "+ l2 + "\n";					//while문을 반복하기 위해 위로 올라갑니다.
-        str += lend + ": " + "\n";					//while문을 탈출하는 label입니다.
+		str +=  l2 + ": " + "\n"
+				+ newTexts.get(ctx.expr()) + "\n"
+				+ "ifeq " + lend + "\n"
+				+ newTexts.get(ctx.stmt()) + "\n"
+				+ "goto " + l2 + "\n"
+				+ lend + ":" + "\n";
+
 
         newTexts.put(ctx,str);						//반복문 bytecode 문자열을 현재 노드에 저장합니다.
         System.out.println("exitWhile_stmt");
@@ -208,18 +210,16 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 	public void exitVar_decl(MiniCParser.Var_declContext ctx) {
 		String varName = ctx.IDENT().getText();	//변수이름을 반환받아 저장합니다.
 		String varDecl = "";
-		String className = "Test.";
-		//putfield 클래스이름.필드이름 전역변수타입
-		//ex)
-		// aload_0
-		// iconst_2
-		// putfield Test.a I -> Test클래스의 a필드에 정수타입으로 2를 넣겠습니다.
-		// this 객체와 상수2를 스택에 넣고 putfield로 2개를 꺼내와서 a필드에 2를 넣습니다.
+
 		if (isDeclWithInit(ctx)) {		//해당 노드가 변수 선언 및 초기화 꼴인지를 검사합니다.
-			varDecl += "putfield "+varName+ "\n"; 	//byte코드로 변환하여 문자열에 다시 저장합니다.
+			varDecl += ".field public static " + varName + " I" + "\n";
 			// v. initialization => Later! skip now..:
 
+		}else if(isDecl(ctx))
+		{
+			varDecl += ".field public static " + varName + " I" + "\n";
 		}
+
 		newTexts.put(ctx, varDecl);
         System.out.println("exitVar_decl");
 	}
@@ -358,14 +358,17 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 			if(ctx.args() != null){		// function calls
 				expr = handleFunCall(ctx, expr); //메서드 호출을 bytecode로 변환하여 저장한다.
 			} else { // expr
-				// Arrays: TODO  
+				// Arrays: TODO
+				expr += "iload_" + symbolTable.getVarId(ctx.IDENT().getText()) + "\n"
+						+ "iload_" + symbolTable.getVarId(ctx.expr(0).getText()) + "\n"
+						+ "iaload" + "\n";
 			}
 		}
 		// IDENT '[' expr ']' '=' expr
 		else { // Arrays: TODO			*/
 		    expr += "iload_" + symbolTable.getVarId(ctx.IDENT().getText()) + "\n"
-                    + "bipush " + newTexts.get(ctx.getChild(2))
-                    + "bipush " + newTexts.get(ctx.getChild(5))
+                    + newTexts.get(ctx.getChild(2))
+                    + newTexts.get(ctx.getChild(5))
                     + "iastore" + "\n";
 		}
 
@@ -415,7 +418,6 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 		//binary operation을 다루기 위해 변수 두개를 호출하여 저장한다.
 		expr += newTexts.get(ctx.expr(0));
 		expr += newTexts.get(ctx.expr(1));
-
 		//어떤 연산장인지 검사한다.
 		switch (ctx.getChild(1).getText()) {
 			case "*":
@@ -431,8 +433,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 
 				//피연산자 두개를 불러와 뺀다. 그 뺀값이 1보다 크거나 같으면 참값입니다.
 			case "==":
-				expr += "isub " + "\n"
-						+ "ifeq "+l2+ "\n"
+				expr += "if_cmpne " + "\n"
 						+ "ldc 0" + "\n"			//==연산자의 결과가 거짓인 경우
 						+ "goto " + lend + "\n"
 						+ l2 + ": " + "\n"
@@ -440,8 +441,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 						+ lend + ": " + "\n";
 				break;
 			case "!=":
-				expr += "isub " + "\n"
-						+ "ifne "+l2+ "\n"			//같지 않은 것이 참인 경우 l2 label로 이동한다.
+				expr += "if_icmpeq " + l2 + "\n"
 						+ "ldc 0" + "\n"			//같은 경우 거짓인 경우입니다.
 						+ "goto " + lend + "\n"
 						+ l2 + ": " + "\n"
@@ -450,8 +450,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 				break;
 			case "<=":
 				// <(5) Fill here>
-                expr += "isub" + "\n"				//피연산자 2개를 불러와 뺀 결과가 참이면 l2 label2로 이동한다.
-						+ "ifgt " + l2 + "\n"
+                expr += "if_icmpgt " + l2 + "\n"
 						+ "ldc 1" + "\n"			// 상수 1을 만들어 <=의 결과가 참인경우입니다.
 						+ "goto " + lend + "\n"		// 수식을 빠져나갑니다.
 						+ l2 + ": " + "\n"
@@ -460,9 +459,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 				break;
 			case "<":
 				// <(6) Fill here>
-				expr +=
-						"isub" + "\n"
-						+"ifge " + l2 + "\n"
+				expr += "if_icmpge " + l2 + "\n"
 						+ "ldc 1" + "\n"
 						+ "goto " + lend + "\n"
 						+ l2 + ": " + "\n"
@@ -472,8 +469,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 
 			case ">=":
 				// <(7) Fill here>
-				expr += "isub" + "\n"
-						+ "iflt " + l2 + "\n"
+				expr += "if_icmplt" + l2 + "\n"
 						+ "ldc 1" + "\n"
 						+ "goto " + lend + "\n"
 						+ l2 + ": " + "\n"
@@ -483,8 +479,7 @@ public class BytecodeGenListener extends MiniCBaseListener implements ParseTreeL
 
 			case ">":
 				// <(8) Fill here>
-				expr += "isub" + "\n"
-						+ "ifle " + l2 + "\n"
+				expr += "if_icmple" + l2 + "\n"
 						+ "ldc 1" + "\n"
 						+ "goto " + lend + "\n"
 						+ l2 + ": " + "\n"
